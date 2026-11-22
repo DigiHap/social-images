@@ -9,7 +9,7 @@
 function sk24x_page_desc( $id ) {
 	foreach ( array( '_seopress_titles_desc', '_sk24_seo_desc' ) as $k ) {
 		$v = trim( (string) get_post_meta( $id, $k, true ) );
-		if ( $v !== '' ) { return sk24x_txt( $v ); }
+		if ( $v !== '' && strpos( $v, '%%' ) === false ) { return sk24x_txt( $v ); }
 	}
 	$ex = (string) get_post_field( 'post_excerpt', $id );
 	return sk24x_txt( $ex );
