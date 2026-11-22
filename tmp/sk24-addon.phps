@@ -9,10 +9,18 @@
 function sk24x_page_desc( $id ) {
 	foreach ( array( '_seopress_titles_desc', '_sk24_seo_desc' ) as $k ) {
 		$v = trim( (string) get_post_meta( $id, $k, true ) );
-		if ( $v !== '' ) { return wp_strip_all_tags( $v ); }
+		if ( $v !== '' ) { return sk24x_txt( $v ); }
 	}
 	$ex = (string) get_post_field( 'post_excerpt', $id );
-	return trim( wp_strip_all_tags( $ex ) );
+	return sk24x_txt( $ex );
+}
+
+function sk24x_txt( $s ) {
+	return trim( preg_replace( '/\s+/u', ' ', html_entity_decode( wp_strip_all_tags( (string) $s ), ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) );
+}
+
+function sk24x_title( $id ) {
+	return sk24x_txt( get_the_title( $id ) );
 }
 
 function sk24x_is_noindex( $id ) {
@@ -43,13 +51,14 @@ add_action( 'wp_head', function () {
 	$trip = array(
 		'@type'       => 'TouristTrip',
 		'@id'         => $url . '#angebot',
-		'name'        => wp_strip_all_tags( get_the_title( $id ) ),
+		'name'        => sk24x_title( $id ),
 		'url'         => $url,
 		'inLanguage'  => 'de-DE',
 		'touristType' => 'Skiurlauber',
 		'provider'    => array( '@id' => $org ),
 	);
 	$desc = sk24x_page_desc( $id );
+	$desc = trim( preg_replace( '/\s*\b[Aa]b\s+\d{1,3}(?:\.\d{3})*(?:,-|,\d+)?\s*(?:€|Euro)(?:\s*(?:p\.\s*P\.|pro Person))?\s*[,.]?/u', '', $desc ) );
 	if ( $desc ) { $trip['description'] = $desc; }
 	if ( $img ) { $trip['image'] = $img; }
 
@@ -78,7 +87,7 @@ add_action( 'wp_head', function () {
 			$offer['validFrom'] = gmdate( 'c', (int) $d['retrieved'] );
 		}
 		if ( $d && function_exists( 'sk24p_price_sentence' ) ) {
-			$offer['description'] = wp_strip_all_tags( sk24p_price_sentence( $d ) );
+			$offer['description'] = sk24x_txt( sk24p_price_sentence( $d ) );
 		}
 		$trip['offers'] = $offer;
 	}
@@ -86,7 +95,7 @@ add_action( 'wp_head', function () {
 	$crumbs = array( array( 'Startseite', $home ) );
 	$ov     = get_page_by_path( 'angebote' );
 	if ( $ov && $ov->post_status === 'publish' ) {
-		$crumbs[] = array( wp_strip_all_tags( get_the_title( $ov ) ), get_permalink( $ov ) );
+		$crumbs[] = array( sk24x_title( $ov->ID ), get_permalink( $ov ) );
 	}
 	$crumbs[] = array( $trip['name'], $url );
 	$items    = array();
@@ -140,7 +149,7 @@ function sk24x_faq_of_post( $post_id ) {
 				if ( ! is_array( $it ) || ( $it['@type'] ?? '' ) !== 'FAQPage' ) { continue; }
 				foreach ( (array) ( $it['mainEntity'] ?? array() ) as $q ) {
 					if ( ! empty( $q['name'] ) && ! empty( $q['acceptedAnswer']['text'] ) ) {
-						$out[ trim( wp_strip_all_tags( $q['name'] ) ) ] = trim( wp_strip_all_tags( $q['acceptedAnswer']['text'] ) );
+						$out[ sk24x_txt( $q['name'] ) ] = sk24x_txt( $q['acceptedAnswer']['text'] );
 					}
 				}
 			}
@@ -192,7 +201,7 @@ function sk24x_build_faq() {
 		$qa = array();
 		foreach ( $f as $q => $a ) { $qa[] = array( 'frage' => $q, 'antwort' => $a ); }
 		$total  += count( $qa );
-		$pages[] = array( 'seite' => wp_strip_all_tags( get_the_title( $id ) ), 'url' => get_permalink( $id ), 'fragen' => $qa );
+		$pages[] = array( 'seite' => sk24x_title( $id ), 'url' => get_permalink( $id ), 'fragen' => $qa );
 	}
 	return wp_json_encode( array(
 		'website'     => 'skifahren24.com',
@@ -216,13 +225,15 @@ function sk24x_build_llms() {
 	$L[]   = 'skifahren24.com ist ein deutschsprachiges Reiseportal für Skiurlaub in den Alpen und den Mittelgebirgen. Die Seite stellt Skigebiete und Regionen vor, vergleicht Skireisen und zeigt Angebote mit tagesaktuellen Ab-Preisen pro Person. Gebucht wird über eine angebundene Buchungsmaske, Preise und Verfügbarkeit werden dort verbindlich bestätigt.';
 	$L[]   = '';
 
-	$skip  = array( 'impressum', 'datenschutz', 'danke', 'kontakt', 'ueber-uns', 'blog', 'angebote', 'ziele' );
+	$skip  = array( 'impressum', 'datenschutz', 'danke', 'kontakt', 'ueber-uns', 'blog', 'angebote', 'ziele', 'faq' );
+	$hide  = array( 'privacy-policy', 'danke' );
 	$reg   = array();
 	$other = array();
 	foreach ( sk24x_public_ids( 'page' ) as $id ) {
 		if ( $id === $front ) { continue; }
 		$slug = get_post_field( 'post_name', $id );
-		$line = '- [' . wp_strip_all_tags( get_the_title( $id ) ) . '](' . get_permalink( $id ) . ')';
+		if ( in_array( $slug, $hide, true ) ) { continue; }
+		$line = '- [' . sk24x_title( $id ) . '](' . get_permalink( $id ) . ')';
 		$d    = sk24x_page_desc( $id );
 		if ( $d ) { $line .= ': ' . $d; }
 		if ( in_array( $slug, $skip, true ) ) { $other[ $slug ] = $line; continue; }
@@ -237,7 +248,7 @@ function sk24x_build_llms() {
 
 	$off = array();
 	foreach ( sk24x_public_ids( 'angebot' ) as $id ) {
-		$line = '- [' . wp_strip_all_tags( get_the_title( $id ) ) . '](' . get_permalink( $id ) . ')';
+		$line = '- [' . sk24x_title( $id ) . '](' . get_permalink( $id ) . ')';
 		$d    = function_exists( 'sk24p_fresh' ) ? sk24p_fresh( $id ) : null;
 		if ( $d ) {
 			$line .= ': ab ' . sk24x_euro( $d['price'] ) . ' pro Person';
@@ -257,7 +268,7 @@ function sk24x_build_llms() {
 
 	$posts = array();
 	foreach ( sk24x_public_ids( 'post' ) as $id ) {
-		$line = '- [' . wp_strip_all_tags( get_the_title( $id ) ) . '](' . get_permalink( $id ) . ')';
+		$line = '- [' . sk24x_title( $id ) . '](' . get_permalink( $id ) . ')';
 		$d    = sk24x_page_desc( $id );
 		if ( $d ) { $line .= ': ' . $d; }
 		$posts[] = $line;
@@ -271,7 +282,7 @@ function sk24x_build_llms() {
 
 	$L[] = '## Weitere Informationen';
 	$L[] = '';
-	foreach ( array( 'ziele', 'angebote', 'blog', 'ueber-uns', 'kontakt', 'impressum', 'datenschutz' ) as $s ) {
+	foreach ( array( 'ziele', 'angebote', 'blog', 'faq', 'ueber-uns', 'kontakt', 'impressum', 'datenschutz' ) as $s ) {
 		if ( isset( $other[ $s ] ) ) { $L[] = $other[ $s ]; }
 	}
 	$L[] = '- [Häufige Fragen (maschinenlesbar)](' . $home . 'faq.json)';
