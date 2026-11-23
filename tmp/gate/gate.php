@@ -175,7 +175,8 @@ if (strpos($pkgPath, '/__pk/') === 0) {
 }
 
 /* ---------- Alle anderen Aufrufe: Cookie pruefen ---------- */
-if (!pkg_valid_cookie()) {
+// Solange noch kein Passkey eingerichtet ist, schuetzt die IP-Sperre in der .htaccess (Einrichtungsphase).
+if (!empty(pkg_creds()) && !pkg_valid_cookie()) {
     header('X-Robots-Tag: noindex, nofollow');
     header('Cache-Control: no-store');
     $isAjax = (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest') || ($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET';
